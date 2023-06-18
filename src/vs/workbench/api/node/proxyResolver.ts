@@ -6,6 +6,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import * as tls from 'tls';
+import * as net from 'net';
 
 import { IExtHostWorkspaceProvider } from 'vs/workbench/api/common/extHostWorkspace';
 import { ExtHostConfigProvider } from 'vs/workbench/api/common/extHostConfiguration';
@@ -15,7 +16,7 @@ import { ExtHostExtensionService } from 'vs/workbench/api/node/extHostExtensionS
 import { URI } from 'vs/base/common/uri';
 import { ILogService } from 'vs/platform/log/common/log';
 import { IExtensionDescription } from 'vs/platform/extensions/common/extensions';
-import { LogLevel, createHttpPatch, createProxyResolver, createTlsPatch, ProxySupportSetting, ProxyAgentParams } from '@vscode/proxy-agent';
+import { LogLevel, createHttpPatch, createProxyResolver, createTlsPatch, ProxySupportSetting, ProxyAgentParams, createNetPatch } from '@vscode/proxy-agent';
 
 export function connectProxyResolver(
 	extHostWorkspace: IExtHostWorkspaceProvider,
@@ -93,6 +94,7 @@ function createPatchedModules(params: ProxyAgentParams, configProvider: ExtHostC
 			onRequest: Object.assign({}, https, createHttpPatch(https, resolveProxy, proxySetting, certSetting, true)),
 			default: Object.assign(https, createHttpPatch(https, resolveProxy, proxySetting, certSetting, false)) // run last
 		} as Record<string, typeof https>,
+		net: Object.assign(net, createNetPatch(params, net)),
 		tls: Object.assign(tls, createTlsPatch(params, tls))
 	};
 }
@@ -114,6 +116,10 @@ function configureModuleLoading(extensionService: ExtHostExtensionService, looku
 			const node_module = <any>globalThis._VSCODE_NODE_MODULES.module;
 			const original = node_module._load;
 			node_module._load = function load(request: string, parent: { filename: string }, isMain: boolean) {
+				if (request === 'net') {
+					return lookup.net;
+				}
+
 				if (request === 'tls') {
 					return lookup.tls;
 				}
